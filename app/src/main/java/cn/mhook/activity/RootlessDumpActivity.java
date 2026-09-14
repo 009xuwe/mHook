@@ -61,7 +61,15 @@ public class RootlessDumpActivity extends Activity {
                 try {
                     startActivityForResult(intent, REQ_APK);
                 } catch (Throwable t) {
-                    GlassToast.warning(RootlessDumpActivity.this, "无法打开文件选择器");
+                    // 一加/ColorOS 等系统无 OPEN_DOCUMENT 处理器，回退到 GET_CONTENT
+                    try {
+                        Intent i2 = new Intent(Intent.ACTION_GET_CONTENT);
+                        i2.addCategory(Intent.CATEGORY_OPENABLE);
+                        i2.setType("application/vnd.android.package-archive");
+                        startActivityForResult(i2, REQ_APK);
+                    } catch (Throwable t2) {
+                        GlassToast.warning(RootlessDumpActivity.this, "无法打开文件选择器");
+                    }
                 }
             }
         });

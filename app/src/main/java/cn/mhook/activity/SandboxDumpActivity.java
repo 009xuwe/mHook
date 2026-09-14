@@ -89,8 +89,16 @@ public class SandboxDumpActivity extends Activity {
                 try {
                     startActivityForResult(intent, REQ_APK);
                 } catch (Throwable t) {
-                    setStatus("无法打开文件选择器");
-                    logLine("错误：无法打开文件选择器");
+                    // 一加/ColorOS 等系统无 OPEN_DOCUMENT 处理器，回退到 GET_CONTENT
+                    try {
+                        Intent i2 = new Intent(Intent.ACTION_GET_CONTENT);
+                        i2.addCategory(Intent.CATEGORY_OPENABLE);
+                        i2.setType("application/vnd.android.package-archive");
+                        startActivityForResult(i2, REQ_APK);
+                    } catch (Throwable t2) {
+                        setStatus("无法打开文件选择器");
+                        logLine("错误：无法打开文件选择器");
+                    }
                 }
             }
         });

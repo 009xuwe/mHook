@@ -59,4 +59,24 @@ public class Config {
         }
         return false;
     }
+
+    public static String getString(String key, String def){
+        JSONObject cfg = getAppCfg();
+        if (cfg!=null && cfg.containsKey(key)){
+            String v = cfg.getString(key);
+            if (v!=null && !v.isEmpty()) return v;
+        }
+        return def;
+    }
+
+    public static int getInt(String key, int def){
+        JSONObject cfg = getAppCfg();
+        if (cfg!=null && cfg.containsKey(key)){
+            try {
+                return cfg.getIntValue(key);
+            }catch (Throwable ignored){
+            }
+        }
+        return def;
+    }
 }

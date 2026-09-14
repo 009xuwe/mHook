@@ -72,6 +72,10 @@ public class SandboxDexDumper {
             hookHitLog(outDir, "立即枚举", st.summary());
         } catch (Throwable ignored) {
         }
+        try {
+            DexConsolidator.consolidate(outDir);
+        } catch (Throwable ignored) {
+        }
         if (!first) return;
         new Thread(new Runnable() {
             @Override
@@ -110,6 +114,11 @@ public class SandboxDexDumper {
                             try {
                                 int r = redumpFilled();
                                 if (r > 0) Log.i(TAG, "redump round " + round + " filled=" + r);
+                            } catch (Throwable ignored) {
+                            }
+                            // 去重/修复/重命名：与真机 Xposed 路径同一整理器，产物统一为 classes*.dex
+                            try {
+                                DexConsolidator.consolidate(outDir);
                             } catch (Throwable ignored) {
                             }
                         }

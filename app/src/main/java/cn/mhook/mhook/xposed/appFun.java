@@ -24,6 +24,7 @@ public class appFun {
         this.c = c;
         if (getEnable("cProperty")) FProxy();
         if (getEnable("putJson")) putJson();
+        if (getEnable("signBypass")) SignBypass.init();
     }
 
     private void getJson(){

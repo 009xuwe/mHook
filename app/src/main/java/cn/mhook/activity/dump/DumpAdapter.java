@@ -32,27 +32,72 @@ public class DumpAdapter extends BaseQuickAdapter<SelectAppItem, BaseViewHolder>
         TextView pkgView = helper.getView(R.id.item_pkg);
         TextView gross = helper.getView(R.id.item_gross);
         TextView dumpBtn = helper.getView(R.id.item_dump_btn);
+        TextView dirBtn = helper.getView(R.id.item_dir_btn);
         if (on) {
-            File[] files = dumpDir.listFiles();
-            int count = 0;
+            int count = 0, filled = 0;
             long size = 0;
+            File[] files = dumpDir.listFiles();
             if (files != null) {
                 for (File f : files) {
                     if (f.isFile() && f.getName().endsWith(".dex")) {
                         count++;
                         size += f.length();
+                        if (f.getName().contains("-filled")) filled++;
                     }
                 }
             }
-            pkgView.setText("/data/mHook/" + pkg + "/dump/\n已脱壳 " + count + " 个 dex（" + formatSize(size) + "）");
+            String progress = "已脱壳 " + count + " 个 dex（" + formatSize(size) + "）"
+                    + (filled > 0 ? "，补码快照 " + filled : "");
+            String last = readLastEvent(new File(dumpDir, "dump_log.txt"));
+            pkgView.setText("/data/mHook/" + pkg + "/dump/\n" + progress
+                    + (last == null ? "" : "\n最近: " + last));
             gross.setText("已开启");
             gross.setTextColor(helper.itemView.getContext().getResources().getColor(R.color.green));
             dumpBtn.setVisibility(View.VISIBLE);
+            dirBtn.setVisibility(View.VISIBLE);
         } else {
             pkgView.setText(pkg);
             gross.setText("未开启");
             gross.setTextColor(helper.itemView.getContext().getResources().getColor(R.color.text));
             dumpBtn.setVisibility(View.GONE);
+            dirBtn.setVisibility(View.GONE);
+        }
+    }
+
+    /** 读取脱壳日志最后一行事件（+Ns tag: msg），带长度保护。 */
+    private static String readLastEvent(File log) {
+        try {
+            if (!log.exists()) return null;
+            byte[] b = new byte[(int) Math.min(log.length(), 4096)];
+            java.io.RandomAccessFile raf = new java.io.RandomAccessFile(log, "r");
+            try {
+                raf.seek(Math.max(0, log.length() - b.length));
+                raf.readFully(b);
+            } finally {
+                raf.close();
+            }
+            String tail = new String(b, "UTF-8");
+            int i = tail.length() - 1;
+            StringBuilder sb = new StringBuilder();
+            int scans = 0;
+            while (i >= 0 && scans < 8) {
+                int end = tail.lastIndexOf('\n', i);
+                if (end < 0) break;
+                String line = tail.substring(end + 1, i + 1).trim();
+                if (line.contains("]")) {
+                    int k = line.indexOf(']');
+                    String ev = line.substring(k + 1).trim();
+                    if (!ev.isEmpty()) {
+                        sb.insert(0, ev);
+                        break;
+                    }
+                }
+                i = end - 1;
+                scans++;
+            }
+            return sb.length() == 0 ? null : sb.toString();
+        } catch (Throwable t) {
+            return null;
         }
     }
 

@@ -2,10 +2,14 @@ package cn.mhook.mhook.xposed.dump;
 
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.nio.ByteBuffer;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.zip.CRC32;
 
@@ -32,11 +36,11 @@ public class MemoryDexDumper {
     private static final byte[] DEX_MAGIC = {0x64, 0x65, 0x78, 0x0A, 0x30, 0x33, 0x35, 0x00};
 
     private static boolean startsWithMagic(byte[] b) {
+        // 兼容各 dex 版本：dex\n035\0 / 036 / 037 / 038 / 039 ...
         if (b == null || b.length < 8) return false;
-        for (int i = 0; i < 8; i++) {
-            if (b[i] != DEX_MAGIC[i]) return false;
-        }
-        return true;
+        if (b[0] != 0x64 || b[1] != 0x65 || b[2] != 0x78 || b[3] != 0x0A) return false;
+        if (b[4] != 0x30 || b[7] != 0x00) return false;
+        return b[5] >= 0x33 && b[5] <= 0x39;
     }
 
     private static final Set<String> sDumped = new HashSet<>();
@@ -44,6 +48,13 @@ public class MemoryDexDumper {
     private static final Set<Long> sSeenCookies = new HashSet<>();
     private static final Set<String> sProbedLayout = new HashSet<>();
     private static boolean sDiagnosedNative;
+
+    /** 补码回收：骨架 dex 的 cookie→最近一次落盘 CRC，及用于主动调用的类描述符源 */
+    private static final Set<Long> sSkeletonCookies = new HashSet<>();
+    private static final Map<Long, String> sSkeletonBase = new HashMap<>();
+    private static final Map<Long, List<String>> sSkeletonClasses = new HashMap<>();
+    private static long sActiveCookie;
+    private static long sActiveIdx;
 
     public static void init(final XC_LoadPackage.LoadPackageParam lpparam) {
         DumpLogger.setPkg(lpparam.packageName);
@@ -82,6 +93,12 @@ public class MemoryDexDumper {
                             }
                             try { dumpAllLoadedDexes(); } catch (Throwable ignored) {
                             }
+                            String cons = DexConsolidator.consolidate(new File(dumpDir));
+                            if (cons != null) DumpLogger.event("整理", cons);
+                            try { activeCallOnce(); } catch (Throwable ignored) {
+                            }
+                            try { redumpFilled(); } catch (Throwable ignored) {
+                            }
                             continue;
                         }
                         long el = System.currentTimeMillis() - start;
@@ -89,6 +106,12 @@ public class MemoryDexDumper {
                             round++;
                             DumpLogger.event("枚举", "第" + round + "轮定时枚举开始");
                             try { dumpAllLoadedDexes(); } catch (Throwable ignored) {
+                            }
+                            String cons = DexConsolidator.consolidate(new File(dumpDir));
+                            if (cons != null) DumpLogger.event("整理", cons);
+                            try { activeCallOnce(); } catch (Throwable ignored) {
+                            }
+                            try { redumpFilled(); } catch (Throwable ignored) {
                             }
                             DumpLogger.writeSummary();
                         }
@@ -141,6 +164,129 @@ public class MemoryDexDumper {
         XposedBridge.log("MemoryDexDumper enumerate done, newDex=" + totalCookie);
     }
 
+    /** 命中骨架(抽取壳)则登记 cookie + 类描述符源，供主动调用与补码回收。 */
+    private static void recordSkeleton(long c, byte[] data) {
+        try {
+            DexInspector.Result ins = DexInspector.inspect(data);
+            if (ins == null || !ins.isSkeleton) return;
+            synchronized (sSkeletonCookies) {
+                if (!sSkeletonCookies.add(c)) return;
+                CRC32 crc = new CRC32();
+                crc.update(data);
+                sSkeletonBase.put(c, Long.toHexString(crc.getValue()));
+                List<String> classes = DexInspector.listClassDescriptors(data);
+                if (classes != null) sSkeletonClasses.put(c, classes);
+            }
+            XposedBridge.log("MemoryDexDumper 登记骨架 dex cookie=0x" + Long.toHexString(c)
+                    + " classes=" + (sSkeletonClasses.get(c) == null ? "?" : sSkeletonClasses.get(c).size()));
+        } catch (Throwable ignored) {
+        }
+    }
+
+    /** FART 式主动调用：对最大骨架 dex 的类逐轮调方法，跨轮次续跑，触发壳回填 codeItem。 */
+    private static void activeCallOnce() {
+        long c;
+        List<String> classes;
+        synchronized (sSkeletonCookies) {
+            if (sSkeletonCookies.isEmpty()) return;
+            if (sActiveCookie == 0) {
+                // 选方法体最多的骨架 dex 作为主目标
+                long best = 0;
+                int bestN = 0;
+                for (Long k : sSkeletonCookies) {
+                    List<String> l = sSkeletonClasses.get(k);
+                    if (l != null && l.size() > bestN) {
+                        bestN = l.size();
+                        best = k;
+                    }
+                }
+                sActiveCookie = best;
+                sActiveIdx = 0;
+            }
+            c = sActiveCookie;
+            classes = sSkeletonClasses.get(c);
+        }
+        if (c == 0 || classes == null || classes.isEmpty()) return;
+        File done = new File(dumpDir, ".active_done");
+        if (done.exists()) return;
+        try {
+            FileOutputStream fos = new FileOutputStream(done);
+            try {
+                fos.write(("pid=" + android.os.Process.myPid() + "\n").getBytes("UTF-8"));
+            } finally {
+                try {
+                    fos.close();
+                } catch (Throwable ignored) {
+                }
+            }
+            long from = sActiveIdx;
+            long next = MethodActiveCaller.run(sAppClassLoader, classes, 4000, from);
+            sActiveIdx = next;
+            if (next >= classes.size()) {
+                DumpLogger.event("主动调用", "完成一轮全部类调用 " + classes.size());
+                sActiveIdx = 0;
+            }
+            int rec = redumpFilled();
+            if (rec > 0) {
+                DumpLogger.event("主动调用", "调用后立即回收快照 " + rec + " 份");
+            }
+        } catch (Throwable t) {
+            XposedBridge.log("MemoryDexDumper activeCallOnce err " + t);
+        }
+    }
+
+    /** 补码回收：重读骨架 cookie 的 ArtDexFile，内容变化则另存 *-filled.dex。 */
+    private static int redumpFilled() {
+        Long[] keys;
+        synchronized (sSkeletonCookies) {
+            if (sSkeletonCookies.isEmpty()) return 0;
+            keys = sSkeletonCookies.toArray(new Long[0]);
+        }
+        int n = 0;
+        for (Long ck : keys) {
+            long c = ck.longValue();
+            try {
+                byte[] data = UnsafeAccess.readArtDex(c);
+                if (data == null || data.length < 0x70) continue;
+                CRC32 crc = new CRC32();
+                crc.update(data);
+                String crcHex = Long.toHexString(crc.getValue());
+                String base;
+                synchronized (sSkeletonCookies) {
+                    base = sSkeletonBase.get(c);
+                }
+                if (crcHex.equals(base)) continue;
+                boolean stillSkel = true;
+                String sum = "";
+                try {
+                    DexInspector.Result ins = DexInspector.inspect(data);
+                    if (ins != null) {
+                        stillSkel = ins.isSkeleton;
+                        sum = ins.summary;
+                    }
+                } catch (Throwable ignored) {
+                }
+                File f = new File(dumpDir, "source-" + data.length + "-" + crcHex + "-filled.dex");
+                FileUtils.writeByteToFile(data, f.getAbsolutePath());
+                try {
+                    f.setReadable(true, false);
+                    f.setWritable(true, false);
+                } catch (Throwable ignored) {
+                }
+                synchronized (sSkeletonCookies) {
+                    sSkeletonBase.put(c, crcHex);
+                }
+                n++;
+                XposedBridge.log("MemoryDexDumper 补码回收 " + f.getName()
+                        + (stillSkel ? " 仍有空壳(继续等待) " + sum : " 方法体已回填完整 ✓ " + sum));
+                DumpLogger.event("补码回收", f.getName() + (stillSkel ? " 待回填 " + sum : " 已回填完整 ✓"));
+            } catch (Throwable t) {
+                XposedBridge.log("MemoryDexDumper 补码回收 cookie=0x" + Long.toHexString(c) + " 异常 " + t);
+            }
+        }
+        return n;
+    }
+
     private static boolean dumpCookie(long c) {
         if (c == 0) return false;
         synchronized (sSeenCookies) {
@@ -149,6 +295,7 @@ public class MemoryDexDumper {
         byte[] data = UnsafeAccess.readArtDex(c);
         if (data != null) {
             dumpDex(data);
+            recordSkeleton(c, data);
             DumpLogger.enumHit(true);
             return true;
         }
@@ -294,10 +441,9 @@ public class MemoryDexDumper {
 
     private static boolean isDexBuffer(ByteBuffer dup) {
         int limit = Math.min(dup.remaining(), 8);
-        for (int i = 0; i < limit; i++) {
-            if (dup.get(i) != DEX_MAGIC[i]) return false;
-        }
-        return true;
+        byte[] b = new byte[limit];
+        for (int i = 0; i < limit; i++) b[i] = dup.get(i);
+        return startsWithMagic(b);
     }
 
     private static void dumpDexPath(String dexPath) {

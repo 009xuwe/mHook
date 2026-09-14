@@ -10,8 +10,6 @@ import com.qmuiteam.qmui.arch.QMUISwipeBackActivityManager;
 import com.tamsiree.rxkit.RxAppTool;
 import com.tamsiree.rxkit.RxShellTool;
 import com.tamsiree.rxkit.RxTool;
-import com.tencent.bugly.Bugly;
-import com.tencent.bugly.crashreport.CrashReport;
 
 import java.io.File;
 
@@ -103,10 +101,6 @@ public class mHookApplication extends Application {
         jsonCfg.context = this;
         appCfg.context = this;
         RxTool.init(this);
-        CrashReport.UserStrategy strategy = new CrashReport.UserStrategy(this);
-        strategy.setAppVersion(RxAppTool.getAppVersionName(this));      //App的版本
-        strategy.setAppPackageName(getPackageName());  //App的包名
-        Bugly.init(this, "d254101b57", false, strategy);
         su.init(this);
     }
 

@@ -126,7 +126,7 @@ public class UpdateManager {
             msg.append("\n发布日期：").append(info.publishedAt.substring(0, 10));
         }
         if (info.body != null && !info.body.isEmpty()) {
-            msg.append("\n\n────────── 更新日志 ──────────\n").append(info.body);
+            msg.append("\n\n── 更新日志 ──\n").append(info.body);
         }
         AlertDialog.Builder builder = new AlertDialog.Builder(activity)
                 .setTitle("发现新版本 " + info.tagName)

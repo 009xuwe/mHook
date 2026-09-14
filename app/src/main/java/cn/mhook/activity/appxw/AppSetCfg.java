@@ -61,6 +61,13 @@ public class AppSetCfg extends Activity {
         // 网络
         addSectionTitle("网络");
         addToggleRow("代理检测及屏蔽", "cProperty");
+        // 过签
+        addSectionTitle("过签");
+        addToggleRow("运行时签名绕过", "signBypass");
+        addTextRow("正版签名(hex/base64)", "signBypassSig");
+        addTextRow("正版APK路径(可选)", "signBypassApk");
+        addLevelRow("绕过级别(1-4)", "signBypassLevel");
+        addShowSigRow("查看当前应用签名");
         // 自定义
         addSectionTitle("自定义");
         addProbeRow();
@@ -159,6 +166,139 @@ public class AppSetCfg extends Activity {
         boolean on = getEnable(tag);
         v.setText(on ? "已开启" : "未开启");
         v.setTextColor(getResources().getColor(on ? R.color.glass_accent_green : R.color.glass_text_tertiary));
+    }
+
+    /** 字符串配置行：点击弹出输入框，保存为 tag 对应字段。 */
+    private void addTextRow(final String name, final String tag) {
+        final LinearLayout row = newRow();
+        addRowTitle(row, name);
+        final TextView valueTv = addRowValue(row);
+        refreshTextStatus(valueTv, tag);
+        row.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                final EditText input = new EditText(AppSetCfg.this);
+                input.setHint("留空则清除");
+                input.setText(getTextCfg(tag));
+                input.setTextColor(getResources().getColor(R.color.glass_text_primary));
+                input.setTextSize(14);
+                new AlertDialog.Builder(AppSetCfg.this)
+                        .setTitle(name)
+                        .setView(input)
+                        .setNegativeButton("取消", null)
+                        .setPositiveButton("保存", new android.content.DialogInterface.OnClickListener() {
+                            @Override
+                            public void onClick(android.content.DialogInterface d, int w) {
+                                String val = input.getText().toString().trim();
+                                setAppCfg(pkg, tag, val);
+                                refreshTextStatus(valueTv, tag);
+                                GlassToast.success(AppSetCfg.this, "已保存，重启目标应用后生效");
+                            }
+                        })
+                        .show();
+            }
+        });
+        container.addView(row);
+    }
+
+    private void refreshTextStatus(TextView v, String tag) {
+        String val = getTextCfg(tag);
+        boolean empty = val == null || val.isEmpty();
+        v.setText(empty ? "未配置" : (val.length() > 20 ? val.substring(0, 20) + "…" : val));
+        v.setTextColor(getResources().getColor(empty ? R.color.glass_text_tertiary : R.color.glass_accent_green));
+    }
+
+    private String getTextCfg(String tag) {
+        try {
+            JSONObject cfg = cn.mhook.mhook.contentprovider.appCfg.getAppCfg(pkg);
+            if (cfg != null && cfg.containsKey(tag)) {
+                return cfg.getString(tag);
+            }
+        } catch (Throwable ignored) {
+        }
+        return "";
+    }
+
+    /** 强度级别行：点击选择 1-4。 */
+    private void addLevelRow(final String name, final String tag) {
+        final LinearLayout row = newRow();
+        addRowTitle(row, name);
+        final TextView valueTv = addRowValue(row);
+        refreshLevelStatus(valueTv, tag);
+        row.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                final String[] items = new String[]{
+                        "Lv.1 PMS Hook(仅本应用)",
+                        "Lv.2 + 全部包/Archive",
+                        "Lv.3 + SigningInfo/安装者",
+                        "Lv.4 + 一致性兜底"};
+                int cur = getLevelCfg(tag) - 1;
+                new AlertDialog.Builder(AppSetCfg.this)
+                        .setTitle(name)
+                        .setSingleChoiceItems(items, cur, new android.content.DialogInterface.OnClickListener() {
+                            @Override
+                            public void onClick(android.content.DialogInterface d, int w) {
+                                setAppCfg(pkg, tag, w + 1);
+                                refreshLevelStatus(valueTv, tag);
+                                GlassToast.success(AppSetCfg.this, "已保存，重启目标应用后生效");
+                                d.dismiss();
+                            }
+                        })
+                        .setNegativeButton("取消", null)
+                        .show();
+            }
+        });
+        container.addView(row);
+    }
+
+    private void refreshLevelStatus(TextView v, String tag) {
+        int level = getLevelCfg(tag);
+        v.setText("Lv." + level);
+        v.setTextColor(getResources().getColor(R.color.glass_accent_green));
+    }
+
+    private int getLevelCfg(String tag) {
+        try {
+            JSONObject cfg = cn.mhook.mhook.contentprovider.appCfg.getAppCfg(pkg);
+            if (cfg != null && cfg.containsKey(tag)) {
+                return cfg.getIntValue(tag);
+            }
+        } catch (Throwable ignored) {
+        }
+        return 3;
+    }
+
+    /** 显示当前应用签名（hex），便于用户核对/填写正版签名。 */
+    private void addShowSigRow(final String name) {
+        LinearLayout row = newRow();
+        addRowTitle(row, name);
+        final TextView valueTv = addRowValue(row);
+        row.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                try {
+                    android.content.pm.PackageInfo pi = getPackageManager().getPackageInfo(pkg, 64);
+                    String hex = "";
+                    if (pi != null && pi.signatures != null && pi.signatures.length > 0) {
+                        byte[] b = pi.signatures[0].toByteArray();
+                        StringBuilder sb = new StringBuilder(b.length * 2);
+                        for (byte x : b) sb.append(String.format("%02X", x));
+                        hex = sb.toString();
+                    }
+                    valueTv.setText(hex.isEmpty() ? "无法获取" : "已复制到剪贴板");
+                    valueTv.setTextColor(getResources().getColor(hex.isEmpty() ? R.color.glass_accent_red : R.color.glass_accent_green));
+                    if (!hex.isEmpty()) {
+                        android.content.ClipboardManager cm = (android.content.ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+                        cm.setPrimaryClip(android.content.ClipData.newPlainText("sig", hex));
+                        GlassToast.success(AppSetCfg.this, "当前签名 hex 已复制，长度 " + hex.length());
+                    }
+                } catch (Throwable t) {
+                    valueTv.setText("获取失败");
+                }
+            }
+        });
+        container.addView(row);
     }
 
     private void addProbeRow() {

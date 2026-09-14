@@ -32,6 +32,20 @@ public class NpatchEngine {
     private NpatchEngine() {
     }
 
+    /** 获取 npatch-dex.jar 的 ClassLoader（含 apksig / BouncyCastle）。 */
+    public static ClassLoader getLoader(Context ctx) throws Exception {
+        File dir = prepare(ctx);
+        ClassLoader resourceLoader = new ResourceAwareLoader(dir, ctx.getClassLoader());
+        File dexJar = new File(dir, "npatch-dex.jar");
+        if (dexJar.exists()) {
+            dexJar.setWritable(false);
+            dexJar.setReadable(true, false);
+        }
+        File optDir = new File(ctx.getCacheDir(), "npatch_opt");
+        if (!optDir.exists()) optDir.mkdirs();
+        return new DexClassLoader(dexJar.getPath(), optDir.getPath(), null, resourceLoader);
+    }
+
     /** 把内置 npatch-dex.jar 与资源解压到 filesDir/npatch。 */
     public static File prepare(Context ctx) throws Exception {
         File dir = new File(ctx.getFilesDir(), "npatch");
@@ -129,6 +143,82 @@ public class NpatchEngine {
         }
         if (best != null) return best;
         throw new Exception("patch 未生成有效的输出文件");
+    }
+
+    /**
+     * 纯过签：不嵌入模块，仅用 NPatch 的 sigBypass 引擎重打包并重签名。
+     * level：0=None 1=Basic 2=High 3=Extreme 4=Seccomp 5=Stealth。
+     * 阻塞执行，返回生成的 *-npatched.apk。
+     */
+    public static File patchSigBypass(Context ctx, File targetApk, int level, File outDir) throws Exception {
+        File dir = prepare(ctx);
+        if (outDir.exists()) {
+            File[] olds = outDir.listFiles();
+            if (olds != null) {
+                for (File o : olds) o.delete();
+            }
+        }
+        if (!outDir.exists()) outDir.mkdirs();
+
+        ClassLoader resourceLoader = new ResourceAwareLoader(dir, ctx.getClassLoader());
+        File dexJar = new File(dir, "npatch-dex.jar");
+        if (dexJar.exists()) {
+            dexJar.setWritable(false);
+            dexJar.setReadable(true, false);
+        }
+        File optDir = new File(ctx.getCacheDir(), "npatch_opt");
+        if (!optDir.exists()) optDir.mkdirs();
+        ClassLoader cl = new DexClassLoader(dexJar.getPath(), optDir.getPath(), null, resourceLoader);
+
+        Class<?> cls = Class.forName("top.nkbe.npatch.patch.NPatch", true, cl);
+        java.lang.reflect.Method main = cls.getMethod("main", String[].class);
+        java.util.List<String> argList = new java.util.ArrayList<>();
+        argList.add("-o");
+        argList.add(outDir.getAbsolutePath());
+        argList.add(targetApk.getAbsolutePath());
+        argList.add("-l");
+        argList.add(String.valueOf(level));
+        if (level == 5) {
+            // Stealth 模式强制要求 --manager（产物运行时需 NPatch Manager 配合）
+            argList.add("--manager");
+        }
+        argList.add("--force");
+        String[] args = argList.toArray(new String[0]);
+        try {
+            main.invoke(null, (Object) args);
+        } catch (java.lang.reflect.InvocationTargetException e) {
+            Throwable c = e.getCause() != null ? e.getCause() : e;
+            StringBuilder sb = new StringBuilder(c.toString());
+            for (StackTraceElement el : c.getStackTrace()) {
+                sb.append("\n    at ").append(el);
+            }
+            if (c.getCause() != null) {
+                sb.append("\nCaused by: ").append(c.getCause());
+            }
+            throw new Exception(sb.toString(), c);
+        } catch (Throwable t) {
+            StringBuilder sb = new StringBuilder(t.toString());
+            for (StackTraceElement el : t.getStackTrace()) {
+                sb.append("\n    at ").append(el);
+            }
+            throw new Exception(sb.toString(), t);
+        }
+
+        File[] files = outDir.listFiles();
+        File best = null;
+        long bestTime = -1;
+        if (files != null) {
+            for (File f : files) {
+                if (f.isFile() && f.getName().endsWith("-npatched.apk") && f.length() > 1000 && f.lastModified() > bestTime) {
+                    best = f;
+                    bestTime = f.lastModified();
+                }
+            }
+        }
+        if (best != null) return best;
+        throw new Exception(level == 5
+                ? "未生成有效输出文件（Stealth 级别5 依赖 NPatch Manager，未生成独立包，请改用级别4 Seccomp）"
+                : "未生成有效的输出文件");
     }
 
     /** 让 NPatch 的 getResourceAsStream("assets/...") 命中 filesDir/npatch 下的文件。 */

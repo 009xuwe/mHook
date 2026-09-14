@@ -1,10 +1,12 @@
 package cn.mhook.mhook.xposed.dump;
 
 import java.io.File;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
 import cn.mhook.mhook.xposed.dump.util.FileUtils;
+import cn.mhook.npatch.DexScanner;
 import android.util.Log;
 
 /**
@@ -38,13 +40,17 @@ public class ActiveClassLoader {
             if (classes == null || classes.isEmpty()) return 0;
             StringBuilder sb = new StringBuilder();
             sb.append("\n***** dex: ").append(dexName).append(" *****\n");
-            // application 段
+            // application 段：优先从 dump 目录已落盘的 dex 中扫描真实 Application（与御安全脱修共用 DexScanner 逻辑），
+            // 运行时 Application 实例类名常是壳代理（如 com.sagittarius.v6.StubApplication），仅作兜底。
             sb.append("***** application *****\n");
             try {
-                if (application instanceof android.app.Application) {
-                    sb.append(((android.app.Application) application).getClass().getName()).append("\n");
+                String runtimeApp = (application instanceof android.app.Application)
+                        ? ((android.app.Application) application).getClass().getName() : null;
+                String realApp = scanRealApplication(outDir, runtimeApp);
+                if (realApp != null) {
+                    sb.append(realApp).append("\n");
                 } else {
-                    sb.append("(未知, 未捕获 Application)\n");
+                    sb.append(runtimeApp != null ? runtimeApp + "\n" : "(未知, 未捕获 Application)\n");
                 }
             } catch (Throwable t) {
                 sb.append("(解析失败: ").append(t).append(")\n");
@@ -52,7 +58,7 @@ public class ActiveClassLoader {
             // appComponentFactory 段
             sb.append("****appComponentFactory****\n");
             try {
-                String f = findAppComponentFactory();
+                String f = findAppComponentFactory(application);
                 sb.append(f != null ? f : "(无)\n");
             } catch (Throwable t) {
                 sb.append("(解析失败: ").append(t).append(")\n");
@@ -67,7 +73,7 @@ public class ActiveClassLoader {
                         && !cn.startsWith("javax.") && !cn.startsWith("dalvik.")
                         && !cn.startsWith("kotlin.") && !cn.startsWith("androidx.core.")) {
                     try {
-                        // initialize=false 只加载类不跑 <clinit>，避免副作用；静默失败
+                        // 只加载类不跑 <clinit>，避免副作用；静默失败
                         Class.forName(cn, false, appClassLoader);
                         loaded = true;
                         ok++;
@@ -93,14 +99,19 @@ public class ActiveClassLoader {
             StringBuilder sm = new StringBuilder();
             sm.append("***** application *****\n");
             try {
-                if (application instanceof android.app.Application) {
-                    sm.append(((android.app.Application) application).getClass().getName()).append("\n");
+                String runtimeApp = (application instanceof android.app.Application)
+                        ? ((android.app.Application) application).getClass().getName() : null;
+                String realApp = scanRealApplication(outDir, runtimeApp);
+                if (realApp != null) {
+                    sm.append(realApp).append("\n");
+                } else {
+                    sm.append(runtimeApp != null ? runtimeApp + "\n" : "");
                 }
             } catch (Throwable ignored) {
             }
             sm.append("****appComponentFactory****\n");
             try {
-                String f = findAppComponentFactory();
+                String f = findAppComponentFactory(application);
                 sm.append(f != null ? f : "(无)\n");
             } catch (Throwable ignored) {
             }
@@ -114,8 +125,41 @@ public class ActiveClassLoader {
         }
     }
 
-    /** 通过 ActivityThread.mAppComponentFactory 反射拿到 factory 类名。 */
-    private static String findAppComponentFactory() {
+    /** 从 dump 目录已落盘的 dex 扫描真实 Application（与御安全脱修共用 DexScanner 逻辑）。 */
+    private static String scanRealApplication(File outDir, String runtimeApp) {
+        try {
+            java.util.ArrayList<File> dexes = new java.util.ArrayList<>();
+            if (outDir != null) {
+                File[] files = outDir.listFiles();
+                if (files != null) {
+                    for (File f : files) {
+                        if (f.isFile() && f.getName().endsWith(".dex")) dexes.add(f);
+                    }
+                }
+            }
+            if (dexes.isEmpty()) return null;
+            List<String[]> apps = DexScanner.findApplicationHierarchy(dexes);
+            return DexScanner.pickRealApplication(apps, runtimeApp);
+        } catch (Throwable t) {
+            return null;
+        }
+    }
+
+    /**
+     * 拿 appComponentFactory 类名。优先用 Application.getApplicationInfo().appComponentFactory
+     * （public 字段，由 PackageManager 解析 manifest 填充，无 hidden API 问题）；
+     * 兜底反射 ActivityThread.mAppComponentFactory（Android 10+，hidden API 下可能失败）。
+     */
+    private static String findAppComponentFactory(Object application) {
+        if (application instanceof android.app.Application) {
+            try {
+                android.content.pm.ApplicationInfo ai = ((android.app.Application) application).getApplicationInfo();
+                if (ai != null && ai.appComponentFactory != null && !ai.appComponentFactory.isEmpty()) {
+                    return ai.appComponentFactory;
+                }
+            } catch (Throwable ignored) {
+            }
+        }
         try {
             Class<?> at = Class.forName("android.app.ActivityThread");
             Object instance = null;

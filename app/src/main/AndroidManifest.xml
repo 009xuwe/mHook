@@ -56,9 +56,12 @@
         </activity>
         <activity android:name="cn.mhook.activity.selectapp.SelectActivity" android:theme="@style/Theme.MHookGlass" />
         <activity android:name="cn.mhook.activity.mkfix.MKFixActivity" android:theme="@style/Theme.MHookGlass" />
+        <activity android:name="cn.mhook.activity.DeShellActivity" android:theme="@style/Theme.MHookGlass" />
+        <activity android:name="cn.mhook.activity.IoConfigActivity" android:theme="@style/Theme.MHookGlass" />
         <activity android:name="cn.mhook.activity.dump.DumpActivity" android:theme="@style/Theme.MHookGlass" />
         <activity android:name="cn.mhook.activity.SandboxDumpActivity" android:theme="@style/Theme.MHookGlass" />
         <activity android:name="cn.mhook.activity.RootlessDumpActivity" android:theme="@style/Theme.MHookGlass" />
+        <activity android:name="cn.mhook.activity.SignBypassActivity" android:theme="@style/Theme.MHookGlass" />
         <activity android:name="cn.mhook.activity.ai.AiActivity" android:launchMode="singleTop" android:theme="@style/Theme.MHookGlass" />
         <activity android:name="cn.mhook.activity.ai.McpSettingActivity" android:theme="@style/Theme.MHookGlass" />
         <activity android:name="cn.mhook.activity.ai.AiSettingActivity" android:theme="@style/Theme.MHookGlass" />

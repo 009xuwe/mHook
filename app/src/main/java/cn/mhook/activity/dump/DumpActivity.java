@@ -2,13 +2,18 @@ package cn.mhook.activity.dump;
 
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.content.ClipData;
+import android.content.ClipboardManager;
 import android.content.Intent;
+import android.net.Uri;
 import android.os.Bundle;
+import android.os.Environment;
 import android.os.Handler;
 import android.view.LayoutInflater;
 import android.view.View;
 
 import androidx.annotation.NonNull;
+import androidx.core.content.FileProvider;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
@@ -32,6 +37,7 @@ import cn.mhook.widget.GlassToast;
 
 import static cn.mhook.mData.mDir;
 import static cn.mhook.msu.su.exec;
+import static cn.mhook.msu.su.getOutput;
 import static cn.mhook.msu.su.set777;
 
 public class DumpActivity extends Activity {
@@ -87,6 +93,7 @@ public class DumpActivity extends Activity {
         adapter.setEmptyView(LayoutInflater.from(this).inflate(R.layout.view_empty, null));
         adapter.addChildClickViewIds(R.id.appInfoItem);
         adapter.addChildClickViewIds(R.id.item_dump_btn);
+        adapter.addChildClickViewIds(R.id.item_dir_btn);
         adapter.addChildLongClickViewIds(R.id.appInfoItem);
         adapter.setOnItemChildClickListener(new OnItemChildClickListener() {
             @Override
@@ -94,6 +101,10 @@ public class DumpActivity extends Activity {
                 final String pkg = datas.get(position).getPkg();
                 if (view.getId() == R.id.item_dump_btn) {
                     dumpNow(pkg);
+                    return;
+                }
+                if (view.getId() == R.id.item_dir_btn) {
+                    openDumpDir(pkg);
                     return;
                 }
                 final boolean on = isDumpOn(pkg);
@@ -184,6 +195,75 @@ public class DumpActivity extends Activity {
                 initList("");
             }
         }, 3000);
+    }
+
+    /** 跳转脱壳目录：root 复制到 /sdcard/mHookDump/<pkg>/dump，再尝试用系统文件管理器打开。 */
+    private void openDumpDir(final String pkg) {
+        final File src = new File(mDir + pkg + "/dump");
+        if (!src.exists()) {
+            GlassToast.warning(this, "该应用脱壳目录不存在");
+            return;
+        }
+        final File dst = new File(Environment.getExternalStorageDirectory(), "mHookDump/" + pkg + "/dump");
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                boolean ok = false;
+                try {
+                    exec("rm -rf '" + dst.getAbsolutePath() + "'; mkdir -p '" + dst.getParentFile().getAbsolutePath()
+                            + "'; cp -r '" + src.getAbsolutePath() + "' '" + dst.getAbsolutePath()
+                            + "'; chmod -R 777 '" + dst.getAbsolutePath() + "'");
+                    // app 进程可能无全盘存储权限看不到 /sdcard，用 su 视角判定导出结果
+                    String cnt = getOutput("ls -A '" + dst.getAbsolutePath() + "' 2>/dev/null | wc -l");
+                    ok = cnt != null && !cnt.trim().isEmpty() && !"0".equals(cnt.trim());
+                } catch (Throwable t) {
+                    ok = false;
+                }
+                final boolean result = ok;
+                handler.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (!result) {
+                            GlassToast.warning(DumpActivity.this, "导出失败：非 root 或目录为空");
+                            return;
+                        }
+                        openDirIntent(pkg, dst);
+                    }
+                });
+            }
+        }).start();
+    }
+
+    private void openDirIntent(String pkg, File dir) {
+        // 1) 系统文件管理器 documentsui 的目录 uri（Android 11+ 通用）
+        String rel = "mHookDump/" + pkg + "/dump";
+        Intent vi = new Intent(Intent.ACTION_VIEW);
+        vi.setDataAndType(Uri.parse("content://com.android.externalstorage.documents/document/primary%3A"
+                + Uri.encode(rel)), "vnd.android.document/directory");
+        vi.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        if (vi.resolveActivity(getPackageManager()) != null) {
+            try {
+                startActivity(vi);
+                return;
+            } catch (Throwable ignored) {
+            }
+        }
+        // 2) FileProvider 目录 uri
+        try {
+            Uri fp = FileProvider.getUriForFile(this, "cn.mhook.mhook.fileProvider", dir);
+            Intent i2 = new Intent(Intent.ACTION_VIEW);
+            i2.setDataAndType(fp, "resource/folder");
+            i2.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+            if (i2.resolveActivity(getPackageManager()) != null) {
+                startActivity(i2);
+                return;
+            }
+        } catch (Throwable ignored) {
+        }
+        // 3) 无可用文件管理器：路径进剪贴板
+        ClipboardManager cm = (ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+        cm.setPrimaryClip(ClipData.newPlainText("mHookDump", dir.getAbsolutePath()));
+        GlassToast.warning(this, "未找到可打开目录的文件管理器，路径已复制到剪贴板：" + dir.getAbsolutePath());
     }
 
     private boolean isAppRunning(String pkg) {

@@ -1,7 +1,6 @@
 package cn.mhook.mhook.xposed.dump;
 
 import android.content.Context;
-import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageInfo;
 
 import java.io.File;
@@ -156,14 +155,22 @@ public class PackerDetector {
         try {
             PackageInfo pi = context.getPackageManager().getPackageArchiveInfo(apkPath,
                     android.content.pm.PackageManager.GET_ACTIVITIES);
-            if (pi != null && pi.applicationInfo != null) {
-                String cls = pi.applicationInfo.className;
-                if (cls == null) {
-                    ApplicationInfo ai = pi.applicationInfo;
-                    cls = ai.className;
-                }
-                if (cls == null) cls = pi.applicationInfo.name;
-                return cls;
+            if (pi != null && pi.applicationInfo != null && pi.applicationInfo.className != null) {
+                return pi.applicationInfo.className;
+            }
+        } catch (Throwable ignored) {
+        }
+        // framework className 常为 null：直接解析 AXML 拿 application android:name（与脱修同一解析器）
+        try (ZipFile zf = new ZipFile(apkPath)) {
+            ZipEntry e = zf.getEntry("AndroidManifest.xml");
+            if (e != null) {
+                java.io.InputStream in = zf.getInputStream(e);
+                java.io.ByteArrayOutputStream bos = new java.io.ByteArrayOutputStream();
+                byte[] buf = new byte[65536];
+                int n;
+                while ((n = in.read(buf)) != -1) bos.write(buf, 0, n);
+                in.close();
+                return cn.mhook.npatch.AxmlPatch.findApplicationName(bos.toByteArray());
             }
         } catch (Throwable ignored) {
         }

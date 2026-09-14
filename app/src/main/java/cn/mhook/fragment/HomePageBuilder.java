@@ -23,6 +23,7 @@ import cn.mhook.activity.ThanksActivity;import cn.mhook.activity.SandboxDumpActi
 import cn.mhook.activity.RootlessDumpActivity;
 import cn.mhook.activity.ai.AiActivity;
 import cn.mhook.activity.appxw.AppXWActivity;
+import cn.mhook.activity.DeShellActivity;
 import cn.mhook.activity.dump.DumpActivity;
 import cn.mhook.activity.hook.HookActivity;
 import cn.mhook.activity.mkfix.MKFixActivity;
@@ -123,6 +124,9 @@ public class HomePageBuilder {
                         R.drawable.ic_analyze, pink, "AI", blue, GlassItem.TYPE_NAV, new View.OnClickListener() {
                             @Override public void onClick(View v) { RxActivityTool.skipActivity(context, AiActivity.class); }
                         }));
+                list.add(new GlassItem("一键脱修", "选APK自动加固检测+免root脱壳重打包+过签", R.drawable.ic_fix, blue, "脱修", orange, GlassItem.TYPE_NAV, new View.OnClickListener() {
+                    @Override public void onClick(View v) { RxActivityTool.skipActivity(context, DeShellActivity.class); }
+                }));
                 break;
             case PAGE_SHELL:
             default:
@@ -137,6 +141,10 @@ public class HomePageBuilder {
                 list.add(new GlassItem("重打包脱壳", "NPatch注入脱壳模块并重签名，安装运行即自动脱壳",
                         R.drawable.ic_sandbox, orange, "免root", orange, GlassItem.TYPE_NAV, new View.OnClickListener() {
                             @Override public void onClick(View v) { RxActivityTool.skipActivity(context, RootlessDumpActivity.class); }
+                        }));
+                list.add(new GlassItem("过签", "选APK选模式过签并重签名，输出Download/mhook_dump",
+                        R.drawable.ic_shield, cyan, "免root", cyan, GlassItem.TYPE_NAV, new View.OnClickListener() {
+                            @Override public void onClick(View v) { RxActivityTool.skipActivity(context, cn.mhook.activity.SignBypassActivity.class); }
                         }));
                 break;
         }

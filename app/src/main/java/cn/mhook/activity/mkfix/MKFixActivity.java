@@ -49,7 +49,7 @@ public class MKFixActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_app_xw);
-        ((TextView) findViewById(R.id.page_title)).setText("改包修复");
+        ((TextView) findViewById(R.id.page_title)).setText("热修复");
         handler = new Handler();
         findViewById(R.id.btn_back).setOnClickListener(new View.OnClickListener() {
             @Override
