@@ -49,6 +49,7 @@ app/src/main/java/cn/mhook/npatch/IoKiller.java
 app/src/main/res/layout/activity_deshell.xml
 app/src/main/res/layout/activity_io_config.xml
 app/src/main/res/layout/activity_sign_bypass.xml
+app/src/main/assets/dpatch/
 
 # 工具/工作产物/第三方
 AGENTS.md

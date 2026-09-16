@@ -20,8 +20,8 @@ ext {
     compileSdkVersion = 36
     targetSdkVersion = 28
     minSdk = 24
-    versionCode = 29
-    versionName = "2.0.6"
+    versionCode = 30
+    versionName = "2.0.7"
     xVersion = '1.1.0'
     hiddenApiBypass = '4.3'
 }

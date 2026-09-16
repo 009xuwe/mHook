@@ -94,6 +94,7 @@ public class DumpActivity extends Activity {
         adapter.addChildClickViewIds(R.id.appInfoItem);
         adapter.addChildClickViewIds(R.id.item_dump_btn);
         adapter.addChildClickViewIds(R.id.item_dir_btn);
+        adapter.addChildClickViewIds(R.id.item_zip_btn);
         adapter.addChildLongClickViewIds(R.id.appInfoItem);
         adapter.setOnItemChildClickListener(new OnItemChildClickListener() {
             @Override
@@ -105,6 +106,10 @@ public class DumpActivity extends Activity {
                 }
                 if (view.getId() == R.id.item_dir_btn) {
                     openDumpDir(pkg);
+                    return;
+                }
+                if (view.getId() == R.id.item_zip_btn) {
+                    exportZip(pkg);
                     return;
                 }
                 final boolean on = isDumpOn(pkg);
@@ -198,8 +203,7 @@ public class DumpActivity extends Activity {
     }
 
     /** 跳转脱壳目录：root 复制到 /sdcard/mHookDump/<pkg>/dump，再尝试用系统文件管理器打开。 */
-    private void openDumpDir(final String pkg) {
-        final File src = new File(mDir + pkg + "/dump");
+    private void openDumpDir(final String pkg) {        final File src = new File(mDir + pkg + "/dump");
         if (!src.exists()) {
             GlassToast.warning(this, "该应用脱壳目录不存在");
             return;
@@ -232,6 +236,75 @@ public class DumpActivity extends Activity {
                 });
             }
         }).start();
+    }
+
+    /** 打包脱壳产物为 zip 导出到 Download/mhook_dump/<pkg>_dump_<时间戳>.zip（含 dex + real_app.txt + 日志）。 */
+    private void exportZip(final String pkg) {
+        final File src = new File(mDir + pkg + "/dump");
+        if (!src.exists()) {
+            GlassToast.warning(this, "该应用脱壳目录不存在");
+            return;
+        }
+        GlassToast.info(this, "正在打包导出...");
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    // 1) 用 su 把 /data/mHook/<pkg>/dump 内容复制到 app 可读的 cache
+                    File cacheDir = new File(getCacheDir(), "export_" + pkg);
+                    exec("rm -rf '" + cacheDir.getAbsolutePath() + "'; mkdir -p '" + cacheDir.getAbsolutePath()
+                            + "'; cp -r '" + src.getAbsolutePath() + "/.' '" + cacheDir.getAbsolutePath()
+                            + "'; chmod -R 777 '" + cacheDir.getAbsolutePath() + "'");
+                    // 递归收集 cacheDir 下所有文件
+                    java.util.List<File> all = new java.util.ArrayList<>();
+                    collectFiles(cacheDir, all);
+                    if (all.isEmpty()) {
+                        handler.post(() -> GlassToast.warning(DumpActivity.this, "导出失败：脱壳目录为空或非 root"));
+                        return;
+                    }
+                    // 2) 打包 zip
+                    String stamp = new java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.US).format(new java.util.Date());
+                    File outDir = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "mhook_dump");
+                    if (!outDir.exists()) outDir.mkdirs();
+                    File zip = new File(outDir, pkg + "_dump_" + stamp + ".zip");
+                    java.util.zip.ZipOutputStream zos = new java.util.zip.ZipOutputStream(new java.io.FileOutputStream(zip));
+                    try {
+                        byte[] buf = new byte[65536];
+                        String prefix = cacheDir.getAbsolutePath() + File.separator;
+                        for (File f : all) {
+                            String entryName = f.getAbsolutePath().substring(prefix.length()).replace(File.separatorChar, '/');
+                            java.util.zip.ZipEntry e = new java.util.zip.ZipEntry(entryName);
+                            zos.putNextEntry(e);
+                            java.io.FileInputStream in = new java.io.FileInputStream(f);
+                            try {
+                                int n;
+                                while ((n = in.read(buf)) != -1) zos.write(buf, 0, n);
+                            } finally {
+                                in.close();
+                            }
+                            zos.closeEntry();
+                        }
+                    } finally {
+                        zos.close();
+                    }
+                    final String path = zip.getAbsolutePath();
+                    handler.post(() -> GlassToast.success(DumpActivity.this, "已导出：" + path));
+                } catch (Throwable t) {
+                    final String err = t.getMessage() == null ? t.getClass().getSimpleName() : t.getMessage();
+                    handler.post(() -> GlassToast.error(DumpActivity.this, "导出失败：" + err));
+                }
+            }
+        }).start();
+    }
+
+    /** 递归收集目录下所有文件。 */
+    private static void collectFiles(File dir, List<File> out) {
+        File[] files = dir.listFiles();
+        if (files == null) return;
+        for (File f : files) {
+            if (f.isDirectory()) collectFiles(f, out);
+            else out.add(f);
+        }
     }
 
     private void openDirIntent(String pkg, File dir) {

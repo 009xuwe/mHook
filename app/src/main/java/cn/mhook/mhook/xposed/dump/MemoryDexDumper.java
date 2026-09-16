@@ -95,6 +95,7 @@ public class MemoryDexDumper {
                             }
                             String cons = DexConsolidator.consolidate(new File(dumpDir));
                             if (cons != null) DumpLogger.event("整理", cons);
+                            scanAndWriteRealApp();
                             try { activeCallOnce(); } catch (Throwable ignored) {
                             }
                             try { redumpFilled(); } catch (Throwable ignored) {
@@ -109,6 +110,7 @@ public class MemoryDexDumper {
                             }
                             String cons = DexConsolidator.consolidate(new File(dumpDir));
                             if (cons != null) DumpLogger.event("整理", cons);
+                            scanAndWriteRealApp();
                             try { activeCallOnce(); } catch (Throwable ignored) {
                             }
                             try { redumpFilled(); } catch (Throwable ignored) {
@@ -628,6 +630,31 @@ public class MemoryDexDumper {
             XposedBridge.log("MemoryDexDumper dump: " + file.getName() + " size=" + data.length
                     + " 体检异常=" + t);
             DumpLogger.registerDump(false, file.getName());
+        }
+    }
+
+    /** 扫描 dump 目录已脱出的 dex，输出真实 Application 到 real_app.txt（与沙箱脱壳一致，供 UI/导出使用）。 */
+    private static void scanAndWriteRealApp() {
+        try {
+            File dir = new File(dumpDir);
+            java.util.ArrayList<File> dexes = new java.util.ArrayList<>();
+            File[] files = dir.listFiles();
+            if (files != null) {
+                for (File f : files) {
+                    if (f.isFile() && f.getName().endsWith(".dex")) dexes.add(f);
+                }
+            }
+            if (dexes.isEmpty()) return;
+            String real = null;
+            try {
+                java.util.List<String[]> apps = cn.mhook.npatch.DexScanner.findApplicationHierarchy(dexes);
+                real = cn.mhook.npatch.DexScanner.pickRealApplication(apps, null);
+            } catch (Throwable ignored) {
+            }
+            String content = "真实 Application: " + (real != null ? real : "(未知)") + "\n";
+            FileUtils.writeByteToFile(content.getBytes("UTF-8"), new File(dir, "real_app.txt").getAbsolutePath());
+            DumpLogger.event("真实Application", real != null ? real : "(未知)");
+        } catch (Throwable ignored) {
         }
     }
 

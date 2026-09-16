@@ -19,3 +19,7 @@
 # If you keep the line number information, uncomment this to
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
+
+# Bugly 崩溃上报：避免混淆，保证堆栈可读/上报正常
+-dontwarn com.tencent.bugly.**
+-keep public class com.tencent.bugly.**{*;}

@@ -12,10 +12,10 @@ public class AiPrompt {
     }
 
     public static String build(Context ctx, String appInfo, boolean mcpEnabled){
-        return build(ctx, appInfo, mcpEnabled, true);
+        return appendCustom(ctx, new StringBuilder(buildBody(ctx, appInfo, mcpEnabled, true))).toString();
     }
 
-    private static String build(Context ctx, String appInfo, boolean mcpEnabled, boolean includeFixPath){
+    private static String buildBody(Context ctx, String appInfo, boolean mcpEnabled, boolean includeFixPath){
         StringBuilder sb = new StringBuilder();
         sb.append("你是 mHook 应用的 AI 逆向辅助助手。mHook 是基于 Xposed/LSPosed 的应用分析工具，支持两种修复资产：\n");
         sb.append("1. 自定义 Hook 配置：运行期对指定类指定方法做返回值替换（无需修改安装包，可直接导入 mHook 生效）。\n");
@@ -135,7 +135,7 @@ public class AiPrompt {
      */
     public static String buildModule(Context ctx, String apkName) {
         StringBuilder sb = new StringBuilder();
-        sb.append(build(ctx, "XP 模块 APK：" + (apkName == null ? "" : apkName), McpSetting.enabledCount(ctx) > 0, false));
+        sb.append(buildBody(ctx, "XP 模块 APK：" + (apkName == null ? "" : apkName), McpSetting.enabledCount(ctx) > 0, false));
         sb.append("\n\n【本任务：XP 模块 APK 静态分析 → 输出 Hook 配置】\n");
         sb.append("下面会给你一份使用 dexlib2 从 XP 模块 APK 提取的文本，包含两类信息：\n");
         sb.append("1. HOOK 行：格式为 \"HOOK api=findAndHookMethod pkg=目标应用包名 class=目标类名 method=方法名 cb=回调类名\"。\n");
@@ -165,6 +165,7 @@ public class AiPrompt {
         sb.append("  }\n");
         sb.append("]\n");
         sb.append("没有可输出的项时输出 []。严禁编造提取文本中不存在的类名/方法名/包名。\n");
+        appendCustom(ctx, sb);
         return sb.toString();
     }
 
@@ -194,6 +195,7 @@ public class AiPrompt {
 
         sb.append("本次目标应用：").append(appInfo == null ? "" : appInfo).append("\n");
         sb.append("用户需求：").append(requirement == null ? "" : requirement);
+        appendCustom(ctx, sb);
         return sb.toString();
     }
 
@@ -201,6 +203,21 @@ public class AiPrompt {
      * AI 脱壳：garlic 反编译 + unidbg 模拟执行 + 直接产出脱壳文件。
      * 目标：真正还原出可用的 dex/apk 文件并落盘，不输出 JSON 契约。
      */
+
+    /**
+     * 追加用户自定义提示词（AI 设置中配置，作用于所有 AI 场景，优先级最高）。
+     */
+    private static StringBuilder appendCustom(Context ctx, StringBuilder sb) {
+        try {
+            String p = AiSetting.customPrompt(ctx);
+            if (p != null && !p.trim().isEmpty()) {
+                sb.append("\n\n【用户自定义提示词（最高优先级，必须严格遵守；与上文冲突时以本条为准）】\n")
+                        .append(p.trim()).append("\n");
+            }
+        } catch (Throwable ignored) {
+        }
+        return sb;
+    }
 
     private static String joinSkills(String[] arr){
         StringBuilder sb = new StringBuilder();

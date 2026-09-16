@@ -33,6 +33,7 @@ public class DumpAdapter extends BaseQuickAdapter<SelectAppItem, BaseViewHolder>
         TextView gross = helper.getView(R.id.item_gross);
         TextView dumpBtn = helper.getView(R.id.item_dump_btn);
         TextView dirBtn = helper.getView(R.id.item_dir_btn);
+        TextView zipBtn = helper.getView(R.id.item_zip_btn);
         if (on) {
             int count = 0, filled = 0;
             long size = 0;
@@ -55,12 +56,14 @@ public class DumpAdapter extends BaseQuickAdapter<SelectAppItem, BaseViewHolder>
             gross.setTextColor(helper.itemView.getContext().getResources().getColor(R.color.green));
             dumpBtn.setVisibility(View.VISIBLE);
             dirBtn.setVisibility(View.VISIBLE);
+            zipBtn.setVisibility(View.VISIBLE);
         } else {
             pkgView.setText(pkg);
             gross.setText("未开启");
             gross.setTextColor(helper.itemView.getContext().getResources().getColor(R.color.text));
             dumpBtn.setVisibility(View.GONE);
             dirBtn.setVisibility(View.GONE);
+            zipBtn.setVisibility(View.GONE);
         }
     }
 

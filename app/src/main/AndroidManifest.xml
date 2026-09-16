@@ -65,6 +65,7 @@
         <activity android:name="cn.mhook.activity.ai.AiActivity" android:launchMode="singleTop" android:theme="@style/Theme.MHookGlass" />
         <activity android:name="cn.mhook.activity.ai.McpSettingActivity" android:theme="@style/Theme.MHookGlass" />
         <activity android:name="cn.mhook.activity.ai.AiSettingActivity" android:theme="@style/Theme.MHookGlass" />
+        <activity android:name="cn.mhook.activity.ai.SkillManageActivity" android:theme="@style/Theme.MHookGlass" />
         <activity android:name="cn.mhook.activity.xp.XpModuleAiActivity" android:theme="@style/Theme.MHookGlass" />
 
         <provider
@@ -80,11 +81,6 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/provider_paths" />
         </provider>
-
-        <activity
-            android:name="com.tencent.bugly.beta.ui.BetaActivity"
-            android:configChanges="keyboardHidden|orientation|screenSize|locale"
-            android:theme="@android:style/Theme.Translucent" />
 
         <activity
             android:name="com.tamsiree.rxui.activity.ActivityWebView"

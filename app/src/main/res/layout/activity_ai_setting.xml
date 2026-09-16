@@ -213,6 +213,75 @@
                             android:textSize="15sp" />
                     </LinearLayout>
 
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:paddingTop="14dp"
+                        android:paddingBottom="14dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="自定义提示词（附加到所有 AI 场景，优先级最高）"
+                            android:textColor="@color/glass_text_secondary"
+                            android:textSize="12sp" />
+
+                        <EditText
+                            android:id="@+id/et_custom_prompt"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:background="@android:color/transparent"
+                            android:gravity="top|start"
+                            android:hint="例如：始终用中文回答；优先给出可一键导入的 Hook 配置"
+                            android:inputType="textMultiLine"
+                            android:minLines="4"
+                            android:textColor="@color/glass_text_primary"
+                            android:textColorHint="@color/glass_text_tertiary"
+                            android:textSize="14sp" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:id="@+id/btn_skill_manage"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:background="?android:attr/selectableItemBackground"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal"
+                        android:paddingTop="14dp"
+                        android:paddingBottom="14dp">
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="技能管理"
+                                android:textColor="@color/glass_text_primary"
+                                android:textSize="15sp" />
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="查看/新建/编辑/删除 AI 逆向技能"
+                                android:textColor="@color/glass_text_tertiary"
+                                android:textSize="11sp" />
+                        </LinearLayout>
+
+                        <ImageView
+                            android:layout_width="20dp"
+                            android:layout_height="20dp"
+                            android:src="@drawable/ic_back"
+                            android:rotation="180"
+                            android:tint="@color/glass_text_tertiary" />
+                    </LinearLayout>
+
                     <TextView
                         android:id="@+id/test_result"
                         android:layout_width="match_parent"

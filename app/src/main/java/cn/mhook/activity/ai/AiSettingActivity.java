@@ -16,7 +16,7 @@ import cn.mhook.widget.GlassToast;
 
 public class AiSettingActivity extends Activity {
 
-    private EditText etBaseUrl, etApiKey, etModel, etMaxTokens, etMaxSteps;
+    private EditText etBaseUrl, etApiKey, etModel, etMaxTokens, etMaxSteps, etCustomPrompt;
     private TextView testResult;
     private boolean keyVisible = false;
 
@@ -30,6 +30,7 @@ public class AiSettingActivity extends Activity {
         etModel = findViewById(R.id.et_model);
         etMaxTokens = findViewById(R.id.et_max_tokens);
         etMaxSteps = findViewById(R.id.et_max_steps);
+        etCustomPrompt = findViewById(R.id.et_custom_prompt);
         testResult = findViewById(R.id.test_result);
 
         etBaseUrl.setText(AiSetting.baseUrl(this));
@@ -37,6 +38,14 @@ public class AiSettingActivity extends Activity {
         etModel.setText(AiSetting.model(this));
         etMaxTokens.setText(String.valueOf(AiSetting.maxTokens(this)));
         etMaxSteps.setText(String.valueOf(AiSetting.maxSteps(this)));
+        etCustomPrompt.setText(AiSetting.customPrompt(this));
+
+        findViewById(R.id.btn_skill_manage).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                startActivity(new android.content.Intent(AiSettingActivity.this, SkillManageActivity.class));
+            }
+        });
 
         findViewById(R.id.btn_back).setOnClickListener(new View.OnClickListener() {
             @Override
@@ -89,6 +98,7 @@ public class AiSettingActivity extends Activity {
             AiSetting.setMaxSteps(this, Integer.parseInt(etMaxSteps.getText().toString().trim()));
         } catch (Throwable ignored) {
         }
+        AiSetting.setCustomPrompt(this, etCustomPrompt.getText().toString());
     }
 
     private void testConnection() {

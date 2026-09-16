@@ -10,6 +10,7 @@ import com.qmuiteam.qmui.arch.QMUISwipeBackActivityManager;
 import com.tamsiree.rxkit.RxAppTool;
 import com.tamsiree.rxkit.RxShellTool;
 import com.tamsiree.rxkit.RxTool;
+import com.tencent.bugly.crashreport.CrashReport;
 
 import java.io.File;
 
@@ -28,6 +29,12 @@ public class mHookApplication extends Application {
     @Override
     protected void attachBaseContext(Context base) {
         super.attachBaseContext(base);
+        // Bugly 崩溃上报（AppID 来自 Bugly 平台，4.1.9.3 用 CrashReport.initCrashReport）
+        try {
+            CrashReport.initCrashReport(this, "3f0b2cfeba", false);
+        } catch (Throwable t) {
+            // bugly init failure should not break the host app
+        }
         try {
             BlackBoxCore.get().doAttachBaseContext(base, new ClientConfiguration() {
                 @Override
