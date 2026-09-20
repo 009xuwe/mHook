@@ -2,6 +2,8 @@
 
 基于 Xposed / LSPosed 的 Android 应用分析与 Hook 辅助工具。
 
+**License**: Apache License 2.0 — see [LICENSE](LICENSE) for details.
+
 ## 功能特性
 
 - 自定义 Hook 配置：运行期对指定类指定方法做返回值替换，无需修改安装包
@@ -30,6 +32,10 @@ gradlew.bat assembleDebug
 产物：`app/build/outputs/apk/debug/app-debug.apk`
 
 Release 签名请自行配置 `signingConfigs` 或使用外部签名工具。
+
+## 许可证
+
+本项目遵循 **Apache License 2.0** 协议。详情请见 [LICENSE](LICENSE) 文件。
 
 ## 开源致谢
 
