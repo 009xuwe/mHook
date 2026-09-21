@@ -66,6 +66,11 @@
         <activity android:name="cn.mhook.activity.ai.McpSettingActivity" android:theme="@style/Theme.MHookGlass" />
         <activity android:name="cn.mhook.activity.ai.AiSettingActivity" android:theme="@style/Theme.MHookGlass" />
         <activity android:name="cn.mhook.activity.ai.SkillManageActivity" android:theme="@style/Theme.MHookGlass" />
+        <activity android:name="cn.mhook.activity.debug.FridaDebugActivity" android:theme="@style/Theme.MHookGlass" />
+        <activity android:name="cn.mhook.activity.debug.FridaTaskActivity" android:theme="@style/Theme.MHookGlass" />
+        <activity android:name="cn.mhook.activity.debug.FridaNativeActivity" android:theme="@style/Theme.MHookGlass" />
+        <activity android:name="cn.mhook.activity.debug.BreakpointActivity" android:theme="@style/Theme.MHookGlass" />
+        <activity android:name="cn.mhook.activity.debug.FridaAiActivity" android:theme="@style/Theme.MHookGlass" />
         <activity android:name="cn.mhook.activity.xp.XpModuleAiActivity" android:theme="@style/Theme.MHookGlass" />
 
         <provider

@@ -114,6 +114,10 @@ public class HomePageBuilder {
                         R.drawable.ic_xp, indigo, "AI", blue, GlassItem.TYPE_NAV, new View.OnClickListener() {
                             @Override public void onClick(View v) { RxActivityTool.skipActivity(context, XpModuleAiActivity.class); }
                         }));
+                list.add(new GlassItem("动态调试", "托管 frida-server / 运行时调试",
+                        R.drawable.ic_bug, cyan, "需Root", orange, GlassItem.TYPE_NAV, new View.OnClickListener() {
+                            @Override public void onClick(View v) { RxActivityTool.skipActivity(context, cn.mhook.activity.debug.FridaDebugActivity.class); }
+                        }));
                 break;
             case PAGE_PATCH:
                 list.add(new GlassItem("MK热修复", "无感知修复异常",

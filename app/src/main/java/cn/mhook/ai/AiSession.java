@@ -81,6 +81,7 @@ public class AiSession {
                     errors.add(t.getMessage());
                 }
                 addUseSkill(ctx, tools);
+        addFridaTools(tools);
                 if (!errors.isEmpty()) {
                     final String errMsg = "部分 MCP 后端不可用：" + join(errors);
                     main.post(new Runnable() {
@@ -328,6 +329,9 @@ assistant.put("role", "assistant");
                 return "[工具调用异常] function.name 为空：工具名必须填在 function.name 字段（可用工具: " + join(availableTools)
                         + "），不要只写在 arguments 里。请用正确的 function.name 重新发起调用。";
             }
+            if (cn.mhook.debug.FridaTools.isFridaTool(name)) {
+                return cn.mhook.debug.FridaTools.execute(ctx, name, args);
+            }
             if ("use_skill".equals(name)) {
                 String skill = args.getString("name");
                 if (skill == null || skill.isEmpty()) {
@@ -390,6 +394,16 @@ assistant.put("role", "assistant");
         String msg = t.getMessage() == null ? "" : t.getMessage();
         return msg.contains("空响应") || msg.contains("timed out") || msg.contains("refused")
                 || msg.contains("reset") || msg.contains("Connection closed") || msg.contains("end of stream");
+    }
+
+    private static void addFridaTools(JSONArray tools) {
+        try {
+            JSONArray fs = cn.mhook.debug.FridaTools.buildTools();
+            for (int i = 0; i < fs.size(); i++) {
+                tools.add(fs.getJSONObject(i));
+            }
+        } catch (Throwable ignored) {
+        }
     }
 
     private static void addUseSkill(Context ctx, JSONArray tools) {
