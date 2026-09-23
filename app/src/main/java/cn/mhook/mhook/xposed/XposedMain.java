@@ -29,13 +29,19 @@ public class XposedMain implements IXposedHookLoadPackage, IXposedHookZygoteInit
     @Override
     public void handleLoadPackage(XC_LoadPackage.LoadPackageParam loadPackageParam) throws Throwable {
         if (loadPackageParam.packageName.equals("cn.mhook.mhook")){
-            findAndHookMethod("cn.mhook.activity.MainActivity", loadPackageParam.classLoader, "xp", new XC_MethodHook() {
-                @Override
-                protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
-                    super.beforeHookedMethod(param);
-                    param.setResult(true);
-                }
-            });
+            // 模块自身进程：仅做自身标记，不注入 Hook 逻辑。
+            // 注意：MainActivity.xp() 可能不存在，必须容错，否则会抛 NoSuchMethodError 污染日志。
+            try {
+                findAndHookMethod("cn.mhook.activity.MainActivity", loadPackageParam.classLoader, "xp", new XC_MethodHook() {
+                    @Override
+                    protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
+                        super.beforeHookedMethod(param);
+                        param.setResult(true);
+                    }
+                });
+            } catch (Throwable e) {
+                Log.d("mhook", "跳过自身 MainActivity.xp hook: " + e.getMessage());
+            }
             return;
         }
         init(loadPackageParam);

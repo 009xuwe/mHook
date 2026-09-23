@@ -63,6 +63,7 @@ public class FridaTaskActivity extends Activity {
         cbOverrideArgs = findViewById(R.id.cb_override_args);
         scrollLog = findViewById(R.id.scroll_log);
         scrollOut = findViewById(R.id.scroll_out);
+        bindScriptTools();
 
         Intent it = getIntent();
         pkg = it.getStringExtra("pkg");
@@ -250,6 +251,182 @@ public class FridaTaskActivity extends Activity {
                 })
                 .setNegativeButton("取消", null)
                 .show();
+    }
+
+    /** 脚本框：直接读剪贴板粘贴（绕过输入法，避免粘贴不全）、清空、实时字符数。 */
+    private void bindScriptTools() {
+        final android.widget.TextView len = findViewById(R.id.tv_script_len);
+        findViewById(R.id.btn_import_script).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                pickScriptFile();
+            }
+        });
+        findViewById(R.id.btn_paste_script).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                pasteIntoScript();
+            }
+        });
+        findViewById(R.id.btn_clear_script).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                etScript.setText("");
+            }
+        });
+        etScript.addTextChangedListener(new android.text.TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int a, int b, int c) {
+            }
+
+            @Override
+            public void onTextChanged(CharSequence s, int a, int b, int c) {
+            }
+
+            @Override
+            public void afterTextChanged(android.text.Editable s) {
+                if (len != null) {
+                    len.setText(s.length() + " 字符");
+                }
+            }
+        });
+        if (len != null) {
+            len.setText(etScript.getText().length() + " 字符");
+        }
+    }
+
+    /** 从系统剪贴板整段读取并写入脚本框（不经过输入法，可避免长脚本被截断）。 */
+    private void pasteIntoScript() {
+        try {
+            android.content.ClipboardManager cm =
+                    (android.content.ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+            if (cm == null || !cm.hasPrimaryClip() || cm.getPrimaryClip() == null) {
+                cn.mhook.widget.GlassToast.warning(this, "剪贴板为空");
+                return;
+            }
+            android.content.ClipData clip = cm.getPrimaryClip();
+            StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < clip.getItemCount(); i++) {
+                CharSequence cs = clip.getItemAt(i).coerceToText(this);
+                if (cs != null) {
+                    sb.append(cs);
+                }
+            }
+            String text = sb.toString();
+            if (text.isEmpty()) {
+                cn.mhook.widget.GlassToast.warning(this, "剪贴板为空");
+                return;
+            }
+            if (text.length() > MAX_SCRIPT_BYTES) {
+                cn.mhook.widget.GlassToast.error(this, "剪贴板内容过大（上限 2048 KB）");
+                return;
+            }
+            etScript.setText(text);
+            etScript.setSelection(text.length());
+            cn.mhook.widget.GlassToast.success(this, "已粘贴 " + text.length() + " 字符");
+        } catch (Throwable t) {
+            cn.mhook.widget.GlassToast.error(this, "粘贴失败：" + t);
+        }
+    }
+
+    private static final int REQ_SCRIPT_FILE = 9310;
+    private static final long MAX_SCRIPT_BYTES = 2 * 1024 * 1024; // 2MB
+
+    /** 从文件导入脚本（完全绕过剪贴板，长脚本不会丢）。 */
+    private void pickScriptFile() {
+        try {
+            Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+            i.addCategory(Intent.CATEGORY_OPENABLE);
+            i.setType("*/*");
+            i.putExtra(Intent.EXTRA_MIME_TYPES, new String[]{
+                    "text/plain", "text/javascript", "application/javascript",
+                    "application/x-javascript", "application/json"});
+            startActivityForResult(i, REQ_SCRIPT_FILE);
+        } catch (Throwable t) {
+            try {
+                Intent i2 = new Intent(Intent.ACTION_GET_CONTENT);
+                i2.addCategory(Intent.CATEGORY_OPENABLE);
+                i2.setType("text/*");
+                startActivityForResult(i2, REQ_SCRIPT_FILE);
+            } catch (Throwable t2) {
+                cn.mhook.widget.GlassToast.error(this, "无法打开文件选择器：" + t2);
+            }
+        }
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == REQ_SCRIPT_FILE && resultCode == RESULT_OK && data != null && data.getData() != null) {
+            loadScriptFromUri(data.getData());
+        }
+    }
+
+    /** 读取脚本文件：校验扩展名/大小/是否二进制，避免误选 APK 等大文件导致崩溃。 */
+    private void loadScriptFromUri(android.net.Uri uri) {
+        try {
+            String name = null;
+            long size = -1;
+            android.database.Cursor c = getContentResolver().query(uri, null, null, null, null);
+            if (c != null) {
+                try {
+                    if (c.moveToFirst()) {
+                        int ni = c.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME);
+                        int si = c.getColumnIndex(android.provider.OpenableColumns.SIZE);
+                        if (ni >= 0) {
+                            name = c.getString(ni);
+                        }
+                        if (si >= 0 && !c.isNull(si)) {
+                            size = c.getLong(si);
+                        }
+                    }
+                } finally {
+                    c.close();
+                }
+            }
+            if (name != null && !isScriptName(name)) {
+                cn.mhook.widget.GlassToast.error(this, "不是脚本文件：" + name + "（仅支持 .js/.txt/.json）");
+                return;
+            }
+            if (size > MAX_SCRIPT_BYTES) {
+                cn.mhook.widget.GlassToast.error(this, "文件过大：" + (size / 1024) + " KB（上限 2048 KB）");
+                return;
+            }
+            java.io.InputStream in = getContentResolver().openInputStream(uri);
+            java.io.ByteArrayOutputStream bos = new java.io.ByteArrayOutputStream();
+            byte[] buf = new byte[65536];
+            int n;
+            long total = 0;
+            while ((n = in.read(buf)) != -1) {
+                total += n;
+                if (total > MAX_SCRIPT_BYTES) {
+                    in.close();
+                    cn.mhook.widget.GlassToast.error(this, "文件过大（上限 2048 KB）");
+                    return;
+                }
+                bos.write(buf, 0, n);
+            }
+            in.close();
+            byte[] bytes = bos.toByteArray();
+            for (byte b : bytes) {
+                if (b == 0) {
+                    cn.mhook.widget.GlassToast.error(this, "不是文本脚本（二进制文件）");
+                    return;
+                }
+            }
+            String text = new String(bytes, "UTF-8");
+            etScript.setText(text);
+            etScript.setSelection(text.length());
+            cn.mhook.widget.GlassToast.success(this, "已导入 " + text.length() + " 字符");
+        } catch (Throwable t) {
+            cn.mhook.widget.GlassToast.error(this, "读取文件失败：" + t);
+        }
+    }
+
+    private static boolean isScriptName(String name) {
+        String l = name.toLowerCase(java.util.Locale.ROOT);
+        return l.endsWith(".js") || l.endsWith(".txt") || l.endsWith(".json")
+                || l.endsWith(".ts") || l.endsWith(".mjs");
     }
 
     private FridaServerManager.Progress logger() {

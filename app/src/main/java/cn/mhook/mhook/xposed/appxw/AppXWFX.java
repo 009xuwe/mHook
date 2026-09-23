@@ -11,6 +11,7 @@ import android.os.IBinder;
 import android.os.Message;
 import android.view.View;
 import android.widget.Toast;
+import com.alibaba.fastjson.JSONArray;
 import com.alibaba.fastjson.JSONObject;
 
 import java.io.File;
@@ -101,17 +102,48 @@ public class AppXWFX {
         });
     }
 
+    /** 已上报过的路径，避免同一路径反复刷屏；有上限防止无限增长。 */
+    private final java.util.Set<String> fileSeen = new java.util.HashSet<String>();
+    private static final int FILE_SEEN_MAX = 500;
+
     private void hookFiles(){
         XposedBridge.hookAllConstructors(File.class, new XC_MethodHook() {
             @Override
             protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
                 super.beforeHookedMethod(param);
-                if (param!=null&&param.args!=null&&param.args.length>0){
-                    H.p(H.msg("访问存储",param.args[0].toString(),putDetail(param,getStackTrace())));
-                    return;
+                if (param == null || param.args == null || param.args.length == 0) return;
+                Object a0 = param.args[0];
+                String path;
+                if (a0 instanceof String) {
+                    path = (String) a0;
+                } else if (a0 instanceof File) {
+                    path = a0.toString();
+                } else {
+                    return; // URI 等其它构造变体不记录
                 }
+                if (path == null || path.isEmpty()) return;
+                if (isNoisyPath(path)) return;
+                synchronized (fileSeen) {
+                    if (fileSeen.contains(path)) return;
+                    if (fileSeen.size() >= FILE_SEEN_MAX) return;
+                    fileSeen.add(path);
+                }
+                // File 构造极高频：不再抓整条调用栈（堆栈+JSON 会瞬间打爆目标进程内存），
+                // 同一路径仅首次上报。
+                H.p(H.msg("访问存储", path, putDetail(null, new JSONArray())));
             }
         });
+    }
+
+    /** 过滤系统 / 类路径 / 自身目录等高频且无意义的 File 构造，避免刷屏与内存爆涨。 */
+    private static boolean isNoisyPath(String p){
+        return p.startsWith("/system/") || p.startsWith("/proc/") || p.startsWith("/dev/")
+                || p.startsWith("/sys/") || p.startsWith("/apex/")
+                || p.startsWith("/data/app/") || p.startsWith("/data/dalvik-cache/")
+                || p.startsWith("/data/misc/") || p.startsWith("/data/local/tmp/")
+                || p.indexOf("/cache/") >= 0
+                || p.endsWith(".dex") || p.endsWith(".apk") || p.endsWith(".odex") || p.endsWith(".vdex")
+                || p.startsWith("/data/user/0/cn.mhook.mhook");
     }
 
     private void hookOnClick(){

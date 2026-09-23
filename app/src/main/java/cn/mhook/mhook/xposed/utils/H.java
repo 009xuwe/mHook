@@ -26,34 +26,49 @@ public  class H {
     public static Context systemContext;
     public static IXposedHookZygoteInit.StartupParam startupparam;
 
+    /** 重入保护：日志链路自身（ContentProvider→Binder/SQLite→new File 等）会再次触发已注册的
+     *  hook（尤其 File 构造），造成无限递归与内存爆涨，用线程本地标记截断。 */
+    private static final ThreadLocal<Boolean> sInLog = new ThreadLocal<Boolean>();
+    /** 上下文就绪前最多缓存的日志条数，避免长期无 context 时 waitSend 无限堆积。 */
+    private static final int WAIT_SEND_MAX = 500;
+
     public static void p(String msg){
-        JSONObject j = JSON.parseObject(msg);
-        XposedBridge.log("test---"+H.pkg+JSONObject.toJSONString(j,true));
-        if (waitSend==null){
-            waitSend = new JSONArray();
-        }
-        if (context==null&&aContext==null){
-            waitSend.add(msg);
-        }else if (context!=null){
-            if (waitSend.size()>0){
-                for (Object o:waitSend){
-                    PrintData.putData(context,o.toString());
-                }
-                waitSend.clear();
-                PrintData.putData(context,msg);
-            }else {
-                PrintData.putData(context,msg);
+        if (Boolean.TRUE.equals(sInLog.get())) return;
+        sInLog.set(Boolean.TRUE);
+        try {
+            JSONObject j = JSON.parseObject(msg);
+            XposedBridge.log("test---"+H.pkg+JSONObject.toJSONString(j,true));
+            if (waitSend==null){
+                waitSend = new JSONArray();
             }
-        }else if (aContext!=null){
-            if (waitSend.size()>0){
-                for (Object o:waitSend){
-                    PrintData.putData(aContext,o.toString());
+            if (context==null&&aContext==null){
+                if (waitSend.size() < WAIT_SEND_MAX) {
+                    waitSend.add(msg);
                 }
-                waitSend.clear();
-                PrintData.putData(aContext,msg);
-            }else {
-                PrintData.putData(aContext,msg);
+            }else if (context!=null){
+                if (waitSend.size()>0){
+                    for (Object o:waitSend){
+                        PrintData.putData(context,o.toString());
+                    }
+                    waitSend.clear();
+                    PrintData.putData(context,msg);
+                }else {
+                    PrintData.putData(context,msg);
+                }
+            }else if (aContext!=null){
+                if (waitSend.size()>0){
+                    for (Object o:waitSend){
+                        PrintData.putData(aContext,o.toString());
+                    }
+                    waitSend.clear();
+                    PrintData.putData(aContext,msg);
+                }else {
+                    PrintData.putData(aContext,msg);
+                }
             }
+        } catch (Throwable ignored) {
+        } finally {
+            sInLog.remove();
         }
     }
 

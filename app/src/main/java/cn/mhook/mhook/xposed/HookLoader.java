@@ -47,9 +47,18 @@ public class HookLoader implements IXposedHookLoadPackage, IXposedHookZygoteInit
      */
     @Override
     public void handleLoadPackage(final XC_LoadPackage.LoadPackageParam loadPackageParam) throws Throwable {
+        if (loadPackageParam.appInfo == null) {
+            return;
+        }
         // 排除系统应用
-        if (loadPackageParam.appInfo == null ||
-                (loadPackageParam.appInfo.flags & (ApplicationInfo.FLAG_SYSTEM | ApplicationInfo.FLAG_UPDATED_SYSTEM_APP)) == 1) {
+        if ((loadPackageParam.appInfo.flags & (ApplicationInfo.FLAG_SYSTEM | ApplicationInfo.FLAG_UPDATED_SYSTEM_APP)) == 1) {
+            return;
+        }
+        // 关键：绝不注入系统框架(system_server)与 SystemUI，否则 hook Activity.onCreate / System.getProperty /
+        // Proxy / VpnService 等极易拖死系统进程，导致卡开机（Pixel/Android16 + LSPosed 已复现）。
+        String pkg = loadPackageParam.packageName;
+        if ("android".equals(pkg) || "com.android.systemui".equals(pkg)
+                || "com.android.phone".equals(pkg)) {
             return;
         }
         Class<?> cls = getApkClass(modulePackageName);
@@ -59,7 +68,12 @@ public class HookLoader implements IXposedHookLoadPackage, IXposedHookZygoteInit
         }catch (NoSuchMethodException e){
             // 找不到initZygote方法
         }
-        cls.getDeclaredMethod(handleHookMethod, loadPackageParam.getClass()).invoke(instance, loadPackageParam);
+        // 模块自身逻辑异常不应向上抛（否则 LSPosed 会记录 InvocationTargetException）
+        try {
+            cls.getDeclaredMethod(handleHookMethod, loadPackageParam.getClass()).invoke(instance, loadPackageParam);
+        } catch (Throwable e) {
+            android.util.Log.d("mhook", "handleLoadPackage 跳过 " + pkg + ": " + e.getMessage());
+        }
 
         /*
         //将loadPackageParam的classloader替换为宿主程序Application的classloader,解决宿主程序存在多个.dex文件时,有时候ClassNotFound的问题

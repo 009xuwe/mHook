@@ -190,10 +190,26 @@ public class HomePageBuilder {
                 null, 0, GlassItem.TYPE_NAV, new View.OnClickListener() {
                     @Override public void onClick(View v) { RxActivityTool.skipActivity(context, cn.mhook.activity.ThanksActivity.class); }
                 }));
+        list.add(new GlassItem("推介-智盾加固", "为你的app保驾护航", R.drawable.ic_shield, violet,
+                null, 0, GlassItem.TYPE_NAV, new View.OnClickListener() {
+                    @Override public void onClick(View v) { openUrl(context, "https://zdcod.com"); }
+                }));
         list.add(new GlassItem("打赏支持", null, R.drawable.ic_gift, orange,
                 null, 0, GlassItem.TYPE_NAV, new View.OnClickListener() {
                     @Override public void onClick(View v) { RxActivityTool.skipActivity(context, DonateActivity.class); }
                 }));
         return list;
+    }
+
+    /** 用浏览器打开链接。 */
+    public static void openUrl(Context context, String url) {
+        try {
+            android.content.Intent i = new android.content.Intent(android.content.Intent.ACTION_VIEW,
+                    android.net.Uri.parse(url));
+            i.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK);
+            context.startActivity(i);
+        } catch (Throwable t) {
+            cn.mhook.widget.GlassToast.error(context, "无法打开链接：" + url);
+        }
     }
 }
