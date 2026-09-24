@@ -36,14 +36,16 @@ public class UpdateChecker {
             conn.disconnect();
             throw new Exception("HTTP " + code);
         }
-        StringBuilder sb = new StringBuilder();
+        java.io.ByteArrayOutputStream bos = new java.io.ByteArrayOutputStream();
         try (InputStream in = conn.getInputStream()) {
             byte[] buf = new byte[8192];
             int n;
-            while ((n = in.read(buf)) > 0) sb.append(new String(buf, 0, n, StandardCharsets.UTF_8));
+            while ((n = in.read(buf)) > 0) bos.write(buf, 0, n);
         }
         conn.disconnect();
-        JSONObject o = JSONObject.parseObject(sb.toString());
+        // 一次性按 UTF-8 解码：分块解码会把跨 read 边界的多字节汉字截断，导致更新日志乱码
+        String json = new String(bos.toByteArray(), StandardCharsets.UTF_8);
+        JSONObject o = JSONObject.parseObject(json);
         if (o == null) throw new Exception("返回数据为空");
         ReleaseInfo info = new ReleaseInfo();
         info.tagName = o.getString("tag_name");
