@@ -109,6 +109,29 @@ public class mHookApplication extends Application {
         appCfg.context = this;
         RxTool.init(this);
         su.init(this);
+
+        // 兜底：BlackBox 的 SimpleCrashFix 会覆盖全局异常处理器并吞掉部分 Java 异常，
+        // 这里在最外层再包一层，确保所有 Java 异常都能上报 Bugly，然后交给原处理器。
+        installBuglyCrashForwarder();
+    }
+
+    private static void installBuglyCrashForwarder() {
+        try {
+            final Thread.UncaughtExceptionHandler prev = Thread.getDefaultUncaughtExceptionHandler();
+            Thread.setDefaultUncaughtExceptionHandler(new Thread.UncaughtExceptionHandler() {
+                @Override
+                public void uncaughtException(Thread thread, Throwable throwable) {
+                    try {
+                        CrashReport.postCatchedException(throwable, thread);
+                    } catch (Throwable ignored) {
+                    }
+                    if (prev != null) {
+                        prev.uncaughtException(thread, throwable);
+                    }
+                }
+            });
+        } catch (Throwable ignored) {
+        }
     }
 
     private boolean isMainProcess() {

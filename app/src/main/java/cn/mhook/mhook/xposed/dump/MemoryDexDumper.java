@@ -693,7 +693,61 @@ public class MemoryDexDumper {
 
         private static boolean sMemDiag;
 
+        /** 可读内存区间缓存（来自 /proc/self/maps），用于越界校验，避免 Unsafe 读野指针 SIGSEGV。 */
+        private static volatile long[][] sReadable;
+        private static volatile long sMapsAt;
+
+        private static void loadMaps() {
+            java.util.List<long[]> list = new java.util.ArrayList<>();
+            java.io.BufferedReader r = null;
+            try {
+                r = new java.io.BufferedReader(new java.io.FileReader("/proc/self/maps"), 32 * 1024);
+                String line;
+                while ((line = r.readLine()) != null) {
+                    int sp = line.indexOf(' ');
+                    if (sp <= 0) continue;
+                    String range = line.substring(0, sp);
+                    int dash = range.indexOf('-');
+                    if (dash <= 0) continue;
+                    String perm = line.length() > sp + 1 ? line.substring(sp + 1, Math.min(sp + 5, line.length())) : "";
+                    if (perm.isEmpty() || perm.charAt(0) != 'r') continue;
+                    try {
+                        long a = Long.parseLong(range.substring(0, dash), 16);
+                        long b = Long.parseLong(range.substring(dash + 1), 16);
+                        list.add(new long[]{a, b});
+                    } catch (Throwable ignored) {
+                    }
+                }
+            } catch (Throwable ignored) {
+            } finally {
+                try {
+                    if (r != null) r.close();
+                } catch (Throwable ignored) {
+                }
+            }
+            sReadable = list.toArray(new long[0][]);
+            sMapsAt = System.currentTimeMillis();
+        }
+
+        private static boolean isReadable(long addr, int len) {
+            if (addr <= 0 || len < 0) return false;
+            long[][] m = sReadable;
+            if (m == null || System.currentTimeMillis() - sMapsAt > 5000) {
+                loadMaps();
+                m = sReadable;
+            }
+            if (m == null) return false;
+            long end = addr + len;
+            for (long[] rg : m) {
+                if (addr >= rg[0] && end <= rg[1]) return true;
+            }
+            return false;
+        }
+
         private static byte[] readMem(long addr, int len) {
+            if (!isReadable(addr, len)) {
+                return null;
+            }
             if (unsafe != null && getLong != null) {
                 try {
                     byte[] buf = new byte[len];
